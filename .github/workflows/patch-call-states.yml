@@ -1,0 +1,81 @@
+name: Patch richer original dialer call states
+on:
+  push:
+    paths: ['.call-states-trigger']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Patch demo
+        run: |
+          python - <<'PY'
+          import re
+          p='index.html'
+          s=open(p,encoding='utf-8').read()
+
+          # Put representative original-package capabilities near the top of the log.
+          marker="const raw=[\n"
+          special="""const raw=[
+['1月3日, 星期六','周宁','北京 · 移动','上午11:33','missed','未接来电','',''],
+['1月3日, 星期六','江鸣','江苏南京','下午2:50','declined','已拒绝的来电','',''],
+['1月3日, 星期六','青禾服务','AI 接听','下午2:32, 0 分 38 秒','aianswer','来电 · AI 接听 38 秒 · 已生成摘要','AI 接听','ok'],
+['1月3日, 星期六','物业中心','设备上的语音留言','下午1:18, 0 分 27 秒','voicemail','语音留言 · 27 秒','语音留言',''],
+['1月3日, 星期六','北岸物流','智能语音回复','上午11:46, 0 分 24 秒','answering','来电 · 智能语音回复 24 秒','智能回复','ok'],
+['1月3日, 星期六','未知号码','境外号码','上午10:21','blocked','已自动阻止的来电','可疑诈骗电话','risk'],
+['1月3日, 星期六','银行客服','官方客服','上午9:18, 2 分 54 秒','received','来电 · 通话 2 分 54 秒 · 已录音','已验证的来电者','ok'],
+['1月2日, 星期五','客服热线','上海','下午8:04','unanswered','去电 · 未接通','',''],
+['1月2日, 星期五','陆言','江西赣州 · 移动','下午6:42, 1 分 11 秒','forwarded','已转接来电 · 通话 1 分 11 秒','',''],
+['1月2日, 星期五','可疑来电','未知地区','下午4:26','missed','未接来电 · 语音钓鱼风险','疑似语音钓鱼','risk'],
+['1月2日, 星期五','陈屿','江西赣州 · 移动','下午3:03, 4 分 12 秒','received','来电 · 通话 4 分 12 秒 · AI 录音摘要','录音摘要','ok'],
+['1月2日, 星期五','营销号码','北京','下午1:57','declined','已拒绝的来电 · 广告','广告','warn'],
+['1月2日, 星期五','顾行宇','江西赣州 · 移动','上午11:12, 0 分 46 秒','sent','去电 · 通话 46 秒','',''],
+['1月2日, 星期五','家庭号码','江西赣州 · 移动','上午9:40, 0 分 19 秒','received','来电 · 通话 19 秒','',''],
+"""
+          if marker in s:
+              # Remove old first 4 entries so the first screen is not duplicated, then prepend specials.
+              start=s.index(marker)
+              after=start+len(marker)
+              lines=s[after:].splitlines()
+              # Drop first four raw array rows only.
+              dropped=0; kept=[]
+              for line in lines:
+                  if dropped<4 and line.startswith("['"):
+                      dropped+=1; continue
+                  kept.append(line)
+              s=s[:start]+special+'\n'.join(kept)
+
+          # Make generated records include a broader but still plausible set of call states.
+          s=s.replace("const extraKinds=['received','sent','received','missed','declined','received','sent','blocked','forwarded'];",
+                      "const extraKinds=['received','sent','received','missed','declined','received','sent','blocked','forwarded','voicemail','aianswer','answering','unanswered'];")
+
+          old_re=r"let cursor=new Date\(2025,11,23\),seed=0;while\(raw\.length<100\)\{.*?seed\+\+;\}"
+          new="""let cursor=new Date(2025,11,23),seed=0;while(raw.length<100){const day=new Date(cursor);const per=2+(seed%3);for(let j=0;j<per&&raw.length<100;j++){const k=extraKinds[(seed+j)%extraKinds.length],name=extraNames[(seed*3+j)%extraNames.length];let place=extraPlaces[(seed+j*2)%extraPlaces.length];const hh=9+((seed*5+j*3)%13),mm=((seed*11+j*17)%60);const noDur=['missed','declined','blocked','unanswered'].includes(k);const sec=String((seed*7+j*13)%60).padStart(2,'0'),mins=j%3;const dur=noDur?'':`, ${mins} 分 ${sec} 秒`;const d=`${day.getFullYear()}年${day.getMonth()+1}月${day.getDate()}日${wd[day.getDay()]}`;const time=`${hh<12?'上午':'下午'}${hh>12?hh-12:hh}:${String(mm).padStart(2,'0')}${dur}`;let desc='来电',tag='',tone='';if(k==='sent')desc='去电';else if(k==='missed')desc='未接来电';else if(k==='declined')desc='已拒绝的来电';else if(k==='blocked'){desc='已自动阻止的来电';tag=seed%2?'可疑骚扰电话':'可疑诈骗电话';tone='risk'}else if(k==='forwarded')desc='已转接来电';else if(k==='unanswered')desc='去电 · 未接通';else if(k==='voicemail'){place='设备上的语音留言';desc=`语音留言 · ${sec} 秒`;tag='语音留言'}else if(k==='aianswer'){place='AI 接听';desc=`来电 · AI 接听 ${sec} 秒 · 已生成摘要`;tag='AI 接听';tone='ok'}else if(k==='answering'){place='智能语音回复';desc=`来电 · 智能语音回复 ${sec} 秒`;tag='智能回复';tone='ok'}if(!noDur&&!['voicemail','aianswer','answering'].includes(k))desc+=` · 通话 ${mins} 分 ${sec} 秒`;raw.push([d,name,place,time,k,desc,tag,tone]);}cursor.setDate(cursor.getDate()-1);seed++;}"""
+          s=re.sub(old_re,new,s,flags=re.S)
+
+          s=s.replace("const icon=k=>({sent:'↗',received:'↙',missed:'↙',declined:'↙',blocked:'↙',unanswered:'↙',forwarded:'↙'}[k]||'↙');const status=k=>({missed:'未接来电',declined:'已拒绝的来电',blocked:'已阻止的来电',unanswered:'未接通',forwarded:'已转接来电'}[k]||'');",
+                      "const icon=k=>({sent:'↗',received:'↙',missed:'↙',declined:'↙',blocked:'↙',unanswered:'↙',forwarded:'↙',aianswer:'↙',answering:'↙',voicemail:'◉'}[k]||'↙');const status=k=>({missed:'未接来电',declined:'已拒绝的来电',blocked:'已阻止的来电',unanswered:'未接通',forwarded:'已转接来电',aianswer:'AI 接听',answering:'智能语音回复',voicemail:'语音留言'}[k]||'');")
+
+          # Add compact status icons for the package-specific capabilities.
+          anchor="const recordedNames=new Set(['北岸物流','林川','沈知遥','陆宁']);"
+          add="""rowIcons.voicemail='<svg viewBox=\"0 0 18 18\" aria-hidden=\"true\"><path d=\"M4.2 5.1a3.1 3.1 0 1 0 0 6.2h9.6a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2H4.2a3.1 3.1 0 0 0 0-6.2m0 1.2a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8m9.6 0a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8\"/></svg>';
+rowIcons.summary='<svg viewBox=\"0 0 18 18\" aria-hidden=\"true\"><path d=\"M3 3h8v1.3H3zm0 3h12v1.3H3zm0 3h9v1.3H3zm0 3h6v1.3H3zm11.2-1.4.45 1.15 1.15.45-1.15.45-.45 1.15-.45-1.15-1.15-.45 1.15-.45z\"/></svg>';
+rowIcons.shield='<svg viewBox=\"0 0 18 18\" aria-hidden=\"true\"><path d=\"M9 1.7 14.5 4v4.1c0 3.5-2.2 6.5-5.5 8.2-3.3-1.7-5.5-4.7-5.5-8.2V4zm0 1.4L4.8 4.9v3.2c0 2.8 1.6 5.2 4.2 6.7 2.6-1.5 4.2-3.9 4.2-6.7V4.9z\"/></svg>';
+"""+anchor
+          if anchor in s and 'rowIcons.voicemail' not in s:
+              s=s.replace(anchor,add)
+
+          old_note=re.compile(r"const rowNote=x=>.*?;\nconst normalizeDateLabel",re.S)
+          new_note="""const rowNote=x=>x[4]==='voicemail'?`<div class=\"note\" aria-label=\"语音留言\">${rowIcons.voicemail}</div>`:x[4]==='aianswer'||x[4]==='answering'?`<div class=\"note\" aria-label=\"AI/智能接听\">${rowIcons.ai}</div>`:x[5].includes('AI 录音摘要')||x[5].includes('已生成摘要')?`<div class=\"note\" aria-label=\"AI 摘要\">${rowIcons.summary}</div>`:x[6]&&x[6].includes('语音钓鱼')?`<div class=\"note\" aria-label=\"语音钓鱼风险\">${rowIcons.shield}</div>`:x[5].includes('已录音')||recordedNames.has(x[1])?`<div class=\"note\" aria-label=\"有通话录音\">${rowIcons.mic}</div>`:'';
+const normalizeDateLabel"""
+          s=old_note.sub(new_note,s)
+
+          open(p,'w',encoding='utf-8').write(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git commit -m 'Show richer Samsung dialer call states and smart features' || exit 0
+          git push
