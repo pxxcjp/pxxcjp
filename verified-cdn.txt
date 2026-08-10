@@ -1,0 +1,3 @@
+verified
+url=https://rawcdn.githack.com/pxxcjp/pxxcjp/c17e2ebfdf246399f25315a3b309874c7cff5384/index.html
+commit=c17e2ebfdf246399f25315a3b309874c7cff5384
