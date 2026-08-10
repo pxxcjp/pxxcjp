@@ -1,0 +1,25 @@
+name: Patch fast scroller hitbox fourth pass
+on:
+  push:
+    paths: ['.fast-hitbox-trigger-4']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Patch CSS
+        run: |
+          python - <<'PY'
+          p='index.html'
+          s=open(p,encoding='utf-8').read()
+          s=s.replace('.fast-track{position:absolute;z-index:42;right:2px;top:88px;bottom:78px;width:100px;touch-action:none}', '.fast-track{position:absolute;z-index:42;right:2px;top:88px;bottom:78px;width:40px;touch-action:none}')
+          s=s.replace('.fast-label{position:absolute;z-index:43;right:300px;', '.fast-label{position:absolute;z-index:43;right:100px;')
+          open(p,'w',encoding='utf-8').write(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git commit -m 'Set fast scroller hitbox to 40px and restore label position' || exit 0
+          git push
