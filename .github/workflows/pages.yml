@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -34,3 +34,24 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify public page
+        shell: bash
+        run: |
+          url='${{ steps.deployment.outputs.page_url }}'
+          echo "Verifying $url"
+          for i in {1..30}; do
+            if curl -fsSL --max-time 15 "$url" | grep -q '三星电话'; then
+              printf 'verified\nurl=%s\ncommit=%s\n' "$url" "$GITHUB_SHA" > verified.txt
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+      - name: Save verification marker
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add verified.txt
+          git commit -m 'Verify public Pages deployment [skip ci]' || exit 0
+          git push
