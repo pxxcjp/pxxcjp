@@ -1,0 +1,3 @@
+verified
+url=https://pxxcjp.github.io/pxxcjp/
+commit=1463f75adccce39eee12fbd5f29d0df147d52d70
